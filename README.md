@@ -3,6 +3,14 @@ DyStruct
 
 DyStruct, or dynamic structs, is a C++ library for efficient, runtime-composed data structures. It hopefully will provide access, reflection, s11n, data morphing (assigning instances of data structures to each other that are similar, but not exactly the same,) etc.
 
+Warning
+-------
+
+This is proof-of-concept code, and there is no documentation. The quality of the code itself is quite poor too. This code is not used in any projects and it is not tested in any meaningful way.
+
+I've made the code available here because it's the Right Thing to do, and I'm hoping for someone to come along and tell me that there is already a library out there that does this and does it better, so I can go and use that!
+
+
 Introduction
 ------------
 
