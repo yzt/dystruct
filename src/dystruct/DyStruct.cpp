@@ -112,6 +112,17 @@ bool DyStructType::hasField (std::string const & name) const
 }
 
 //----------------------------------------------------------------------
+
+DyStructType::Field const * DyStructType::findField (std::string const & name) const
+{
+	for (auto const & f : m_fields)
+		if (name == f.name)
+			return &f;
+
+	return nullptr;
+}
+
+//----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
 SizeType DyStructType::calculateFootprint () const

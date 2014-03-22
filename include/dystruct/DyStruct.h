@@ -47,7 +47,7 @@ typedef unsigned char Byte;
 
 typedef uint32_t SizeType;
 typedef uint32_t CountType;
-typedef uint16_t OffsetType;	// 16 or 32?
+typedef SizeType OffsetType;	// 16 or 32?
 
 //----------------------------------------------------------------------
 
@@ -161,7 +161,7 @@ class Type
 	
 protected:
 	Type (Family family) : m_family {family} {assert (int(m_family) >= 0 && family < Family::_count);}
-	virtual ~Type () {}
+	virtual ~Type () = default;
 
 	virtual Type * clone () const = 0;
 
@@ -217,8 +217,6 @@ protected:
 		assert (int(m_basic_type) >= 0 && m_basic_type < Basic::_count);
 	}
 	
-	virtual ~BasicType () override {}
-	
 	virtual Type * clone () const override {return new BasicType {*this};}
 	
 public:
@@ -263,7 +261,6 @@ protected:
 		, m_max_value {-1}	//{std::numeric_limits<int64_t>::min()}
 		, m_underlying_type {underlyingType ()}
 	{}
-	virtual ~EnumType () override {}
 	
 	virtual Type * clone () const override {return new EnumType {*this};}
 	
@@ -311,8 +308,6 @@ protected:
 	{
 		assert (m_element_type);
 	}
-
-	virtual ~ArrayType () override {}
 	
 	virtual Type * clone () const override {return new ArrayType {*this};}
 
@@ -355,8 +350,7 @@ public:
 	typedef std::vector<Field> FieldContainer;
 
 protected:
-	DyStructType () : Type {Family::DyStruct}, m_fields {} {}
-	virtual ~DyStructType ();
+	DyStructType () : Type {Family::DyStruct}, m_cur_size {0}, m_fields {} {}
 	
 	virtual Type * clone () const {return new DyStructType {*this};}
 
@@ -375,6 +369,7 @@ public:
 	bool hasField (std::string const & name) const;
 	SizeType getFieldCount () const {return SizeType(m_fields.size());}
 	Field const & getField (size_t index) const {return m_fields[index];}
+	Field const * findField (std::string const & name) const;
 
 protected:
 	SizeType calculateFootprint () const;
@@ -484,6 +479,109 @@ private:
 	CompiledType const * m_ctype;
 };
 
+
+//======================================================================
+// Accessors:
+//======================================================================
+// TODO: Add a lot of debugging features (e.g. keep a pointer to CompiledType in accessor.)
+//======================================================================
+
+/// When the final field you want to access is a Basic field.
+template <Basic BasicType>
+class Accessor
+{
+	friend class CompiledType;
+
+	typedef typename details::BasicTypeMap<BasicType>::type MyT;
+	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+
+private:
+	explicit Accessor (OffsetType offset)
+		: m_offset {offset}
+	{}
+
+public:
+	~Accessor () = default;
+
+	MyT & operator () (InstancePtr inst) {return *reinterpret_cast<MyT *>(inst.data() + m_offset);}
+	MyCT & operator () (InstancePtr inst) const {return *reinterpret_cast<MyCT *>(inst.data() + m_offset);}
+
+private:
+	OffsetType m_offset;	/// This is always a byte offset.
+};
+
+//----------------------------------------------------------------------
+
+/// When the final field you want to access is a *packed* array of Basic fields.
+template <Basic BasicType>
+class AccessorArray
+{
+	friend class CompiledType;
+
+	typedef typename details::BasicTypeMap<BasicType>::type MyT;
+	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+
+private:
+	explicit AccessorArray (OffsetType offset)
+		: m_offset {offset}
+	{}
+
+public:
+	~AccessorArray () = default;
+
+	// TODO: Actually implement this whenever you wrote ctors for Accessor
+	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * sizeof(MyT)};}
+
+	// Probably should not implement any of these:
+	///// Use like this: x(p)[42]
+	///// Where: x is the accessor, p is the instance ptr and 42 is the index.
+	//MyT * operator () (InstancePtr inst) {return reinterpret_cast<MyT *>(inst.data() + m_offset);}
+	//MyCT * operator () (InstancePtr inst) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset);}
+	//
+	//MyT & operator () (InstancePtr inst, size_t index) {return reinterpret_cast<MyT *>(inst.data() + m_offset + index * sizeof(MyT));}
+	//MyCT & operator () (InstancePtr inst, size_t index) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset + index * sizeof(MyT));}
+
+private:
+	OffsetType m_offset;
+};
+
+
+//----------------------------------------------------------------------
+
+/// When the final field you want to access is an array of Basic fields with a *stride*.
+template <Basic BasicType>
+class AccessorStride
+{
+	friend class CompiledType;
+
+	typedef typename details::BasicTypeMap<BasicType>::type MyT;
+	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+
+private:
+	AccessorStride (OffsetType offset, OffsetType stride)
+		: m_offset {offset}
+		, m_stride {stride}
+	{}
+
+public:
+	~AccessorStride () = default;
+
+	// TODO: Actually implement this whenever you wrote ctors for Accessor
+	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * m_stride};}
+
+	// Probably should not implement any of these:
+	//MyT & operator () (InstancePtr inst, size_t index) {return reinterpret_cast<MyT *>(inst.data() + m_offset + index * m_stride);}
+	//MyCT & operator () (InstancePtr inst, size_t index) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset + index * m_stride);}
+
+private:
+	OffsetType m_offset;
+	OffsetType m_stride;
+};
+
+
+//----------------------------------------------------------------------
+//======================================================================
+// CompiledType:
 //======================================================================
 
 class CompiledType
@@ -543,91 +641,34 @@ public:
 	SizeType sizeOf() const {return m_size;}
 	ID id () const {return m_id;}
 	
+	template <Basic basic_type>
+	Accessor<basic_type> accessor () const
+	{
+		assert (m_type->isBasic());
+		assert (dynamic_cast<BasicType const *>(m_type)->getBasicType() == basic_type);
+
+		return Accessor<basic_type>{0};
+	}
+
+	template <Basic basic_type>
+	Accessor<basic_type> accessorField (std::string const & field_name) const
+	{
+		assert (m_type->isDyStruct());
+		auto dys_type = dynamic_cast<DyStructType const *>(m_type);
+		assert (dys_type->hasField(field_name));
+		auto field = dys_type->findField (field_name);
+		assert (field->type->isBasic());
+		assert (dynamic_cast<BasicType const *>(field->type)->getBasicType() == basic_type);
+
+		return Accessor<basic_type>{field->offset};
+	}
+
 protected:
 	Type const * m_type;
 	SizeType const m_size;
 	ID const m_id;
 };
 
-//======================================================================
-// Accessors:
-//======================================================================
-// TODO: Add a lot of debugging features (e.g. keep a pointer to CompiledType in accessor.)
-//======================================================================
-
-/// When the final field you want to access is a Basic field.
-template <Basic BasicType>
-class Accessor
-{
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
-
-public:
-	~Accessor () = default;
-
-	MyT & operator () (InstancePtr inst) {return *reinterpret_cast<MyT *>(inst.data() + m_offset);}
-	MyCT & operator () (InstancePtr inst) const {return *reinterpret_cast<MyCT *>(inst.data() + m_offset);}
-
-private:
-	OffsetType m_offset;	/// This is always a byte offset.
-};
-
-//----------------------------------------------------------------------
-
-/// When the final field you want to access is a *packed* array of Basic fields.
-template <Basic BasicType>
-class AccessorArray
-{
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
-
-public:
-	~AccessorArray () = default;
-
-	// TODO: Actually implement this whenever you wrote ctors for Accessor
-	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * sizeof(MyT)};}
-
-	// Probably should not implement any of these:
-	///// Use like this: x(p)[42]
-	///// Where: x is the accessor, p is the instance ptr and 42 is the index.
-	//MyT * operator () (InstancePtr inst) {return reinterpret_cast<MyT *>(inst.data() + m_offset);}
-	//MyCT * operator () (InstancePtr inst) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset);}
-	//
-	//MyT & operator () (InstancePtr inst, size_t index) {return reinterpret_cast<MyT *>(inst.data() + m_offset + index * sizeof(MyT));}
-	//MyCT & operator () (InstancePtr inst, size_t index) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset + index * sizeof(MyT));}
-
-private:
-	OffsetType m_offset;
-};
-
-
-//----------------------------------------------------------------------
-
-/// When the final field you want to access is an array of Basic fields with a *stride*.
-template <Basic BasicType>
-class AccessorStriden
-{
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
-
-public:
-	~AccessorStriden () = default;
-
-	// TODO: Actually implement this whenever you wrote ctors for Accessor
-	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * m_stride};}
-
-	// Probably should not implement any of these:
-	//MyT & operator () (InstancePtr inst, size_t index) {return reinterpret_cast<MyT *>(inst.data() + m_offset + index * m_stride);}
-	//MyCT & operator () (InstancePtr inst, size_t index) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset + index * m_stride);}
-
-private:
-	OffsetType m_offset;
-	OffsetType m_stride;
-};
-
-
-//----------------------------------------------------------------------
-//======================================================================
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 //======================================================================
