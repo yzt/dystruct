@@ -12,23 +12,25 @@ struct Vec3
 int main ()
 {
 	namespace Dy = DyStruct;
-	
+	using DyF = DyStruct::Family;
+	using DyB = DyStruct::Basic;
+
 	Dy::TypeManager tm {};
 	
-	auto tU64 = tm.createType<Dy::Family::Basic>(Dy::Basic::U64);
-	auto tArr50 = tm.createType<Dy::Family::Array>(50U, tU64);
+	auto tU64 = tm.createType<DyF::Basic>(DyB::U64);
+	auto tArr50 = tm.createType<DyF::Array>(50U, tU64);
 	
-	auto tIVec3 = tm.createType<Dy::Family::DyStruct>();
+	auto tIVec3 = tm.createType<DyF::DyStruct>();
 	tIVec3->addField ({tU64, "x"});
 	tIVec3->addField ({tU64, "y"});
 	tIVec3->addField ({tU64, "z"});
 
-	auto cU64 = tm.compile (tU64);
-	auto cArr50 = tm.compile (tArr50);
-	auto cIVec3 = tm.compile (tIVec3);
+	auto cU64 = tm.compile (tU64, "U64");
+	auto cArr50 = tm.compile (tArr50, "ull[50]");
+	auto cIVec3 = tm.compile (tIVec3, "IVec3");
 
-	cout << cArr50->sizeOf() << endl;
-	cout << cIVec3->sizeOf() << endl;
+	cout << cArr50->sizeOf() << " == " << tm.getCompiledType("ull[50]")->sizeOf() << endl;
+	cout << cIVec3->sizeOf() << " == " << tm.getCompiledType("IVec3")->sizeOf() << endl;
 
 	Dy::InstancePtr p = cArr50->createInstance ();
 	Dy::InstancePtr q = p;
@@ -69,10 +71,11 @@ int main ()
 
 		cout << "s = (" << x(s) << ", " << y(s) << ", " << z(s) << ")\n";
 		cout << "t = (" << x(t) << ", " << y(t) << ", " << z(t) << ")\n";
+
+		delete tt;
+		delete ss;
 	// }
 
-	delete tt;
-	delete ss;
 	t.destroySelf ();
 	s.destroySelf ();
 	/**q = nullptr;/*/q.nullify ();/**/

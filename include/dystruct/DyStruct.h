@@ -49,6 +49,8 @@ typedef uint32_t SizeType;
 typedef uint32_t CountType;
 typedef SizeType OffsetType;	// 16 or 32?
 
+typedef std::string Name;
+
 //----------------------------------------------------------------------
 
 enum class Family
@@ -419,25 +421,24 @@ public:
 		return ret;
 	}
 	
+	// Make sure you've destroyed all CompiledType and Type instances that depend on this first
 	bool destroyType (Type * type);
 	bool hasType (Type * type) const;
 
-	//bool assignName (std::string new_name, Type * type);
-	//bool hasName (Type * type) const;
-
-	CompiledType * compile (Type * type);
+	CompiledType * compile (Type * type, Name const & name);
 	bool destroyCompiledType (CompiledType * cmptype);
 	bool hasCompiledType (CompiledType * cmptype) const;
 	
+	CompiledType * getCompiledType (Name const & name) const;
+	Type const * getType (Name const & name) const;
+
 private:
 
 private:
 	std::unordered_set<Type *> m_raw_types;
 	std::unordered_set<CompiledType *> m_compiled_types;
 	
-//	std::unordered_set<std::string *> m_names;
-//	std::unordered_map<Type *, std::vector<std::string *>> m_type_to_names;
-//	std::unordered_map<std::string *, Type *> m_name_to_type;
+	std::unordered_map<Name, CompiledType *> m_names;
 };
 
 //======================================================================
@@ -598,10 +599,11 @@ private:
 	}
 	
 private:
-	CompiledType (Type const * type)
+	CompiledType (Type const * type, Name name)
 		: m_type (type)
 		, m_size (type->getSizeOf())
 		, m_id (CalculateID(type))
+		, m_name (std::move(name))
 	{}
 	
 	~CompiledType ()
@@ -640,6 +642,7 @@ public:
 	Type const * rawType () const {return m_type;}
 	SizeType sizeOf() const {return m_size;}
 	ID id () const {return m_id;}
+	Name const & name () const {return m_name;}
 	
 	template <Basic basic_type>
 	Accessor<basic_type> accessor () const
@@ -667,6 +670,7 @@ protected:
 	Type const * m_type;
 	SizeType const m_size;
 	ID const m_id;
+	Name const m_name;
 };
 
 //----------------------------------------------------------------------

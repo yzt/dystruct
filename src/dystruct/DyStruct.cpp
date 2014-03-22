@@ -152,6 +152,7 @@ bool DyStructType::allElementsFixedFootprint () const
 TypeManager::TypeManager ()
 	: m_raw_types {}
 	, m_compiled_types {}
+	, m_names {}
 {
 }
 
@@ -166,6 +167,8 @@ TypeManager::~TypeManager ()
 
 void TypeManager::clear ()
 {
+	m_names.clear ();
+
 	for (auto & c : m_compiled_types)
 		delete c;
 	m_compiled_types.clear ();
@@ -182,6 +185,7 @@ bool TypeManager::destroyType (Type * type)
 	auto i = m_raw_types.find (type);
 	if (m_raw_types.end() == i)
 		return false;
+
 	delete *i;
 	m_raw_types.erase (i);
 	return true;
@@ -196,10 +200,19 @@ bool TypeManager::hasType (Type * type) const
 
 //----------------------------------------------------------------------
 
-CompiledType * TypeManager::compile (Type * type)
+CompiledType * TypeManager::compile (Type * type, Name const & name)
 {
-	auto ret = new CompiledType {type};
-	m_compiled_types.insert (ret);
+	if (m_names.find(name) != m_names.end())	// Name already exists
+		return nullptr;
+
+	auto ret = new CompiledType {type, name};
+
+	if (ret)
+	{
+		m_compiled_types.insert (ret);
+		m_names[name] = ret;
+	}
+
 	return ret;
 }
 
@@ -210,8 +223,11 @@ bool TypeManager::destroyCompiledType (CompiledType * cmptype)
 	auto i = m_compiled_types.find (cmptype);
 	if (m_compiled_types.end() == i)
 		return false;
+
+	m_names.erase ((*i)->name());
 	delete *i;
 	m_compiled_types.erase (i);
+
 	return true;
 }
 
@@ -220,6 +236,28 @@ bool TypeManager::destroyCompiledType (CompiledType * cmptype)
 bool TypeManager::hasCompiledType (CompiledType * cmptype) const
 {
 	return m_compiled_types.end() != m_compiled_types.find(cmptype);
+}
+
+//----------------------------------------------------------------------
+
+CompiledType * TypeManager::getCompiledType (Name const & name) const
+{
+	auto i = m_names.find (name);
+	if (m_names.end() != i)
+		return i->second;
+	else
+		return nullptr;
+}
+
+//----------------------------------------------------------------------
+
+Type const * TypeManager::getType (Name const & name) const
+{
+	auto i = m_names.find (name);
+	if (m_names.end() != i)
+		return i->second->rawType();
+	else
+		return nullptr;
 }
 
 //----------------------------------------------------------------------
