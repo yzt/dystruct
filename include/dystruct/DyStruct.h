@@ -107,9 +107,9 @@ namespace details {
 		bool const associative;				// Associative (i.e. key-value) type, e.g. map
 		bool const fixed_count;				// Count of elements is fixed, e.g. basic, array
 
-		FamilyTraits () = delete;
-		FamilyTraits (FamilyTraits const &) = delete;
-		FamilyTraits & operator = (FamilyTraits const &) = delete;
+//		FamilyTraits () = delete;
+//		FamilyTraits (FamilyTraits const &) = delete;
+//		FamilyTraits & operator = (FamilyTraits const &) = delete;
 	};
 
 	struct BasicTraits
@@ -122,9 +122,9 @@ namespace details {
 		bool const is_signed;
 		bool const is_float;
 
-		BasicTraits () = delete;
-		BasicTraits (BasicTraits const &) = delete;
-		BasicTraits & operator = (BasicTraits const &) = delete;
+//		BasicTraits () = delete;
+//		BasicTraits (BasicTraits const &) = delete;
+//		BasicTraits & operator = (BasicTraits const &) = delete;
 	};
 
 	extern const FamilyTraits gc_FamilyTraits [int(Family::_count)];
@@ -274,8 +274,8 @@ public:
 	virtual bool isFixedFootprint () const override {return true;}
 
 	virtual inline void updateHash (Hasher & hasher) const override;
-	virtual bool construct (void * mem, SizeType sz) const override {return true; mem; sz;}
-	virtual bool destruct (void * mem, SizeType sz) const override {return true; mem; sz;}
+	virtual bool construct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
+	virtual bool destruct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
 
 	bool addEntry (std::string name, uint32_t value);	// Will fail if either already is in the Enum
 	bool addEntry (std::string name);					// Auto value, 1 more than previous max
