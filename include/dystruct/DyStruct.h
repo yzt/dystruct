@@ -155,6 +155,11 @@ namespace details {
 class InstancePtr;
 class TypeManager;
 
+class BasicType;
+class EnumType;
+class ArrayType;
+class DyStructType;
+
 //----------------------------------------------------------------------
 
 class Type
@@ -196,13 +201,34 @@ public:
 	bool isComposite () const {return familyTraits().composite;}
 	bool isAssociative () const {return familyTraits().associative;}
 	bool isFixedCount () const {return familyTraits().fixed_count;}
+
+	// Type conversion convenience functions; the use of dynamic_cast is irritating but probably sound.
+	template <typename T> T const * as () const {return dynamic_cast<T const *>(this);}
+	template <typename T> T * as () {return dynamic_cast<T *>(this);}
 	
+	BasicType const * asBasic () const {return as<BasicType>();}
+	EnumType const * asEnum () const {return as<EnumType>();}
+	ArrayType const * asArray () const {return as<ArrayType>();}
+	DyStructType const * asDyStruct () const {return as<DyStructType>();}
+
+	BasicType * asBasic () {return as<BasicType>();}
+	EnumType * asEnum () {return as<EnumType>();}
+	ArrayType * asArray () {return as<ArrayType>();}
+	DyStructType * asDyStruct () {return as<DyStructType>();}
+
 protected:
 	details::FamilyTraits const & familyTraits () const {return details::gc_FamilyTraits[int(m_family)];}
 	
 private:
 	Family m_family;
 };
+
+//======================================================================
+
+//template <typename T> T const * as (Type const * type) {return dynamic_cast<T const *>(type);}
+//template <typename T> T * as (Type * type) {return dynamic_cast<T *>(type);}
+//template <typename T> T const & as (Type const & type) {return dynamic_cast<T const &>(type);}
+//template <typename T> T & as (Type & type) {return dynamic_cast<T &>(type);}
 
 //======================================================================
 
@@ -232,8 +258,8 @@ public:
 	virtual bool construct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
 	virtual bool destruct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
 
-	Basic getBasicType () const {return m_basic_type;}
-	char const * getBasicTypeName () const {return basicTraits().name;}
+	Basic getType () const {return m_basic_type;}
+	char const * getTypeName () const {return basicTraits().name;}
 
 	bool isNumeric () const {return basicTraits().is_numeric;}
 	bool isInteger () const {return basicTraits().is_integer;}
@@ -324,6 +350,8 @@ public:
 	virtual bool construct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
 	virtual bool destruct (void * /*mem*/, SizeType /*sz*/) const override {return true;}
 	
+	Type const * getElemType () const {return m_element_type;}
+
 private:
 	uint32_t m_count;
 	Type * m_element_type;
@@ -488,15 +516,35 @@ private:
 //======================================================================
 
 /// When the final field you want to access is a Basic field.
-template <Basic BasicType>
-class Accessor
+template <Basic basic_type>
+class AccessorDirect
 {
-	friend class CompiledType;
+	//friend class CompiledType;
 
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+	typedef typename details::BasicTypeMap<basic_type>::type MyT;
+	typedef typename details::BasicTypeMap<basic_type>::type const MyCT;
+
+public:
+	~AccessorDirect () = default;
+
+	MyT & operator () (InstancePtr inst) {return *reinterpret_cast<MyT *>(inst.data());}
+	MyCT & operator () (InstancePtr inst) const {return *reinterpret_cast<MyCT *>(inst.data());}
 
 private:
+};
+
+//----------------------------------------------------------------------
+
+/// When the final field you want to access is a Basic field.
+template <Basic basic_type>
+class Accessor
+{
+	//friend class CompiledType;
+
+	typedef typename details::BasicTypeMap<basic_type>::type MyT;
+	typedef typename details::BasicTypeMap<basic_type>::type const MyCT;
+
+public:
 	explicit Accessor (OffsetType offset)
 		: m_offset {offset}
 	{}
@@ -514,15 +562,45 @@ private:
 //----------------------------------------------------------------------
 
 /// When the final field you want to access is a *packed* array of Basic fields.
-template <Basic BasicType>
-class AccessorArray
+template <Basic basic_type>
+class AccessorArrayDirect
 {
-	friend class CompiledType;
+	//friend class CompiledType;
 
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+	typedef typename details::BasicTypeMap<basic_type>::type MyT;
+	typedef typename details::BasicTypeMap<basic_type>::type const MyCT;
+
+public:
+	~AccessorArrayDirect () = default;
+
+	// TODO: Actually implement this whenever you wrote ctors for Accessor
+	Accessor<basic_type> operator [] (OffsetType index) {return Accessor<basic_type>{index * sizeof(MyT)};}
+
+	// Probably should not implement any of these:
+	///// Use like this: x(p)[42]
+	///// Where: x is the accessor, p is the instance ptr and 42 is the index.
+	//MyT * operator () (InstancePtr inst) {return reinterpret_cast<MyT *>(inst.data() + m_offset);}
+	//MyCT * operator () (InstancePtr inst) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset);}
+	//
+	//MyT & operator () (InstancePtr inst, size_t index) {return reinterpret_cast<MyT *>(inst.data() + m_offset + index * sizeof(MyT));}
+	//MyCT & operator () (InstancePtr inst, size_t index) const {return reinterpret_cast<MyCT *>(inst.data() + m_offset + index * sizeof(MyT));}
 
 private:
+};
+
+
+//----------------------------------------------------------------------
+
+/// When the final field you want to access is a *packed* array of Basic fields.
+template <Basic basic_type>
+class AccessorArray
+{
+	//friend class CompiledType;
+
+	typedef typename details::BasicTypeMap<basic_type>::type MyT;
+	typedef typename details::BasicTypeMap<basic_type>::type const MyCT;
+
+public:
 	explicit AccessorArray (OffsetType offset)
 		: m_offset {offset}
 	{}
@@ -531,7 +609,7 @@ public:
 	~AccessorArray () = default;
 
 	// TODO: Actually implement this whenever you wrote ctors for Accessor
-	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * sizeof(MyT)};}
+	Accessor<basic_type> operator [] (size_t index) {return Accessor<basic_type>{m_offset + index * sizeof(MyT)};}
 
 	// Probably should not implement any of these:
 	///// Use like this: x(p)[42]
@@ -550,22 +628,22 @@ private:
 //----------------------------------------------------------------------
 
 /// When the final field you want to access is an array of Basic fields with a *stride*.
-template <Basic BasicType>
-class AccessorStride
+template <Basic basic_type>
+class AccessorStriden
 {
-	friend class CompiledType;
+	//friend class CompiledType;
 
-	typedef typename details::BasicTypeMap<BasicType>::type MyT;
-	typedef typename details::BasicTypeMap<BasicType>::type const MyCT;
+	typedef typename details::BasicTypeMap<basic_type>::type MyT;
+	typedef typename details::BasicTypeMap<basic_type>::type const MyCT;
 
-private:
-	AccessorStride (OffsetType offset, OffsetType stride)
+public:
+	AccessorStriden (OffsetType offset, OffsetType stride)
 		: m_offset {offset}
 		, m_stride {stride}
 	{}
 
 public:
-	~AccessorStride () = default;
+	~AccessorStriden () = default;
 
 	// TODO: Actually implement this whenever you wrote ctors for Accessor
 	//Accessor<BasicType> operator [] (size_t index) {return {m_offset + index * m_stride};}
@@ -645,25 +723,51 @@ public:
 	Name const & name () const {return m_name;}
 	
 	template <Basic basic_type>
-	Accessor<basic_type> accessor () const
+	AccessorDirect<basic_type> accessor () const
 	{
 		assert (m_type->isBasic());
-		assert (dynamic_cast<BasicType const *>(m_type)->getBasicType() == basic_type);
+		assert (m_type->asBasic()->getType() == basic_type);
 
-		return Accessor<basic_type>{0};
+		return {};
+	}
+
+	template <Basic basic_type>
+	AccessorArrayDirect<basic_type> accessorArray () const
+	{
+		assert (m_type->isArray());
+		assert (m_type->asArray()->getElemType()->isBasic());
+		assert (m_type->asArray()->getElemType()->asBasic()->getType() == basic_type);
+
+		return {};
 	}
 
 	template <Basic basic_type>
 	Accessor<basic_type> accessorField (std::string const & field_name) const
 	{
 		assert (m_type->isDyStruct());
-		auto dys_type = dynamic_cast<DyStructType const *>(m_type);
-		assert (dys_type->hasField(field_name));
-		auto field = dys_type->findField (field_name);
+		assert (m_type->asDyStruct()->hasField(field_name));
+
+		auto field = m_type->asDyStruct()->findField (field_name);
+
 		assert (field->type->isBasic());
-		assert (dynamic_cast<BasicType const *>(field->type)->getBasicType() == basic_type);
+		assert (field->type->asBasic()->getType() == basic_type);
 
 		return Accessor<basic_type>{field->offset};
+	}
+
+	template <Basic basic_type>
+	AccessorArray<basic_type> accessorFieldArray (std::string const & field_name) const
+	{
+		assert (m_type->isDyStruct());
+		assert (m_type->asDyStruct()->hasField(field_name));
+
+		auto field = m_type->asDyStruct()->findField (field_name);
+
+		assert (field->type->isArray());
+		assert (field->type->asArray()->getElemType()->isBasic());
+		assert (field->type->asArray()->getElemType()->asBasic()->getType() == basic_type);
+
+		return AccessorArray<basic_type>{field->offset};
 	}
 
 protected:

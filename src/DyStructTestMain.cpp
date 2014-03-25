@@ -38,12 +38,17 @@ int main ()
 	Dy::InstancePtr s = cIVec3->createInstance ();
 	Dy::InstancePtr t = cIVec3->createInstance ();
 
-	auto x = cIVec3->accessorField<Dy::Basic::U64>("x");
-	auto y = cIVec3->accessorField<Dy::Basic::U64>("y");
-	auto z = cIVec3->accessorField<Dy::Basic::U64>("z");
+	auto a = cArr50->accessorArray<DyB::U64>();
 
-	cout << "ivec3 s = (" << x(s) << ", " << y(s) << ", " << z(s) << ")\n";
-	cout << "ivec3 t = (" << x(t) << ", " << y(t) << ", " << z(t) << ")\n";
+	auto x = cIVec3->accessorField<DyB::U64>("x");
+	auto y = cIVec3->accessorField<DyB::U64>("y");
+	auto z = cIVec3->accessorField<DyB::U64>("z");
+
+// Accessing fields in a DyStructType
+	cout << hex;
+	cout << "ivec3 s = (0x" << x(s) << ", 0x" << y(s) << ", 0x" << z(s) << ")\n";
+	cout << "ivec3 t = (0x" << x(t) << ", 0x" << y(t) << ", 0x" << z(t) << ")\n";
+	cout << dec;
 
 	x(s) = 42;
 	y(s) = 69;
@@ -76,6 +81,20 @@ int main ()
 		delete ss;
 	// }
 
+// Accessing an ArrayType
+	for (int i = 0, e = 50; i < e; ++i)
+		a[i](p) = 42 + i * i;
+
+	uint64_t sum = 0;
+	for (int i = 0, e = 50; i < e; ++i)
+		sum += a[i](q);
+
+	for (int i = 0, e = 50; i < e; ++i)
+		cout << " " << a[i](q);
+	cout << endl;
+	cout << "Sum = " << sum << endl;
+
+// Cleanup
 	t.destroySelf ();
 	s.destroySelf ();
 	/**q = nullptr;/*/q.nullify ();/**/
