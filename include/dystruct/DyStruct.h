@@ -574,7 +574,7 @@ public:
 	~AccessorArrayDirect () = default;
 
 	// TODO: Actually implement this whenever you wrote ctors for Accessor
-	Accessor<basic_type> operator [] (OffsetType index) {return Accessor<basic_type>{index * sizeof(MyT)};}
+	Accessor<basic_type> operator [] (OffsetType index) {return Accessor<basic_type>{OffsetType(index * sizeof(MyT))};}
 
 	// Probably should not implement any of these:
 	///// Use like this: x(p)[42]
@@ -609,7 +609,7 @@ public:
 	~AccessorArray () = default;
 
 	// TODO: Actually implement this whenever you wrote ctors for Accessor
-	Accessor<basic_type> operator [] (size_t index) {return Accessor<basic_type>{m_offset + index * sizeof(MyT)};}
+	Accessor<basic_type> operator [] (size_t index) {return Accessor<basic_type>{OffsetType(m_offset + index * sizeof(MyT))};}
 
 	// Probably should not implement any of these:
 	///// Use like this: x(p)[42]
